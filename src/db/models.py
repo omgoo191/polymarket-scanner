@@ -10,7 +10,8 @@ from sqlalchemy import (
     BigInteger, Boolean, Column, Index, Integer, JSON,
     Numeric, String, Text, UniqueConstraint
 )
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMPTZ
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+TIMESTAMPTZ = TIMESTAMP(timezone=True)
 from sqlalchemy.orm import DeclarativeBase
 
 
