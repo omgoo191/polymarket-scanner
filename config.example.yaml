@@ -1,0 +1,87 @@
+telegram:
+  bot_token: "8387734650:AAHfco4rspea2ig_GPh2XQTKnad69PUJ6y4"       # from @BotFather
+  chat_id: "393624688"           # your DM chat ID (use @userinfobot)
+
+polygonscan:
+  api_key: "SQPRPR5VKG3KVKNYKNFXSR2H2Q3H8J483P"    # free at polygonscan.com — 100k calls/day
+  # Watch BOTH Polygon USDC contracts (bridged + native). Leave as-is.
+  usdc_contracts:
+    - "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"  # USDC.e  (bridged, legacy Polymarket deposits)
+    - "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"  # USDC    (native,  Circle-issued since 2023)
+
+# Optional: Moralis free-tier API key for fallback token transfer lookups
+# Get one free at moralis.io (no credit card, 40k req/month)
+# If omitted, the radar runs fine on Polygonscan alone.
+moralis:
+  api_key: ""   # optional — leave blank to disable fallback
+
+database:
+  url: "postgresql+asyncpg://radar:radar@localhost:5432/polymarket_radar"
+
+polymarket:
+  rest_base_url: "https://gamma-api.polymarket.com"
+  clob_base_url: "https://clob.polymarket.com"
+  markets_limit: 100          # how many markets to fetch per page
+
+polling:
+  interval_seconds: 60        # main poll interval
+  trades_lookback_minutes: 10 # how far back to fetch trades each cycle
+
+funding:
+  lookback_minutes: 180       # how far back to look for wallet funding
+
+scoring:
+  strong_threshold: 70
+  medium_threshold: 55
+  # Feature weights (must sum to 100)
+  weights:
+    size: 30
+    timing: 20
+    wallet_history: 15
+    funding: 15
+    impact: 10
+    cluster: 10
+
+alerts:
+  rate_limit_minutes: 30      # min gap between alerts for same market+trader
+  min_trade_size_usd: 5000    # ignore trades below this (reduce noise)
+
+# Keywords that flag a market as "insider-risk"
+insider_keywords:
+  - election
+  - president
+  - congress
+  - senate
+  - governor
+  - prime minister
+  - chancellor
+  - referendum
+  - impeach
+  - resign
+  - acquire
+  - merger
+  - acquisition
+  - antitrust
+  - approved
+  - blocked
+  - deal close
+  - sanctions
+  - tariff
+  - treaty
+  - invasion
+  - military
+  - coup
+  - arrest
+  - indict
+  - charged
+  - verdict
+  - ruling
+  - appointed
+  - nominated
+  - fired
+  - resign
+  - crypto
+  - bitcoin
+  - etf approved
+  - fed rate
+  - interest rate

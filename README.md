@@ -141,4 +141,3 @@ requirements.txt
 - All data is public on-chain and via Polymarket APIs
 - No private keys, no trading, no financial advice
 - Thresholds are conservative by default — tune to your preference
-"# polymarket-scanner" 

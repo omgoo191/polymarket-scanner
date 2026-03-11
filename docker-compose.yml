@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: radar_postgres
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: radar
+      POSTGRES_DB: polymarket_radar
+    ports:
+      - "5432:5432"
+    volumes:
+      - radar_pgdata:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar -d polymarket_radar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  radar_pgdata:
