@@ -1,0 +1,34 @@
+---
+- name: k3s setup
+  hosts: vps
+  become: true
+
+  tasks:
+    - name: install k3s
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - \
+          --disable traefik \
+          --write-kubeconfig-mode 644
+
+    - name: Ensure local .kube dir exists
+      file:
+        path: "{{ lookup('env', 'HOME') }}/.kube"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      become: false
+
+    - name: Fetch kubeconfig
+      fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+        flat: yes
+      become: false
+
+    - name: Replace 127.0.0.1 with VPS IP in kubeconfig
+      replace:
+        path: "{{ lookup('env', 'HOME') }}/.kube/config"
+        regexp: '127\.0\.0\.1'
+        replace: "{{ ansible_host }}"
+      delegate_to: localhost
+      become: false

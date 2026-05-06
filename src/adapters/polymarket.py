@@ -18,17 +18,11 @@ from config import load_config
 
 logger = logging.getLogger(__name__)
 
-# USDC decimals on Polygon
 USDC_DECIMALS = 6
+MAX_PAGES = 5  # cap pagination to avoid infinite loops
 
 
 class PolymarketAdapter:
-    """
-    Fetches:
-    - Active markets (with insider-risk tagging)
-    - Recent trades for those markets
-    - Price snapshots (best-bid / last-traded)
-    """
 
     def __init__(self):
         cfg = load_config()
@@ -42,7 +36,7 @@ class PolymarketAdapter:
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=30)
+            timeout = aiohttp.ClientTimeout(total=20)
             self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
@@ -50,40 +44,41 @@ class PolymarketAdapter:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Markets
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def fetch_markets(self) -> list[dict]:
         """Return normalized market records with insider_risk flag."""
         markets = []
 
-        # Try REST first
+        logger.info("[Polymarket] Fetching markets via REST...")
         try:
             markets = await self._fetch_markets_rest()
-            logger.info(f"[Polymarket] Fetched {len(markets)} markets via REST")
+            logger.info(f"[Polymarket] REST returned {len(markets)} markets")
         except Exception as e:
-            logger.warning(f"[Polymarket] REST failed ({e}), trying CLOB GraphQL")
-            markets = await self._fetch_markets_clob()
-            logger.info(f"[Polymarket] Fetched {len(markets)} markets via CLOB")
+            logger.warning(f"[Polymarket] REST failed ({e}), trying CLOB...")
+            try:
+                markets = await self._fetch_markets_clob()
+                logger.info(f"[Polymarket] CLOB returned {len(markets)} markets")
+            except Exception as e2:
+                logger.error(f"[Polymarket] Both sources failed: {e2}")
+                return []
 
-        # Tag insider-risk
-        tagged = []
         for m in markets:
             m["insider_risk"] = self._is_insider_risk(m.get("title", ""))
-            tagged.append(m)
 
-        insider_count = sum(1 for m in tagged if m["insider_risk"])
+        insider_count = sum(1 for m in markets if m["insider_risk"])
         logger.info(f"[Polymarket] {insider_count} insider-risk markets identified")
-        return tagged
+        return markets
 
     async def _fetch_markets_rest(self) -> list[dict]:
         session = await self._get_session()
         markets = []
         offset = 0
 
-        while True:
+        for page in range(MAX_PAGES):
+            logger.info(f"[Polymarket] REST page {page + 1} (offset={offset})...")
             url = f"{self.rest_base}/markets"
             params = {
                 "active": "true",
@@ -94,22 +89,20 @@ class PolymarketAdapter:
                 resp.raise_for_status()
                 data = await resp.json()
 
-            # gamma API returns list directly or {"data": [...]}
-            if isinstance(data, list):
-                batch = data
-            else:
-                batch = data.get("data", data)
-
+            batch = data if isinstance(data, list) else data.get("data", data)
             if not batch:
+                logger.info(f"[Polymarket] REST empty batch at page {page + 1}, stopping")
                 break
 
             for item in batch:
                 markets.append(self._normalize_market_rest(item))
 
+            logger.info(f"[Polymarket] REST page {page + 1}: got {len(batch)} markets")
+
             if len(batch) < self.markets_limit:
                 break
             offset += self.markets_limit
-            await asyncio.sleep(0.2)  # be polite
+            await asyncio.sleep(0.2)
 
         return markets
 
@@ -134,17 +127,17 @@ class PolymarketAdapter:
         }
 
     async def _fetch_markets_clob(self) -> list[dict]:
-        """GraphQL fallback via CLOB API."""
         session = await self._get_session()
+        logger.info("[Polymarket] Fetching from CLOB...")
         url = f"{self.clob_base}/markets"
         params = {"limit": self.markets_limit}
-        markets = []
 
         async with session.get(url, params=params) as resp:
             resp.raise_for_status()
             data = await resp.json()
 
         items = data if isinstance(data, list) else data.get("data", [])
+        markets = []
         for item in items:
             markets.append({
                 "id": str(item.get("condition_id", item.get("id", ""))),
@@ -159,38 +152,42 @@ class PolymarketAdapter:
         title_lower = title.lower()
         return any(kw in title_lower for kw in self.insider_keywords)
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Trades
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def fetch_trades(
         self,
         market_id: str,
         since: Optional[datetime] = None,
     ) -> list[dict]:
-        """Fetch recent trades for a market. Returns normalized trade dicts."""
+        # Gamma REST is public (no auth). CLOB requires auth — fallback only.
         try:
-            trades = await self._fetch_trades_clob(market_id, since)
+            trades = await self._fetch_trades_gamma(market_id, since)
+            if trades:
+                return trades
         except Exception as e:
-            logger.warning(f"[Polymarket] CLOB trades failed for {market_id}: {e}")
-            trades = []
+            logger.debug(f"[Polymarket] Gamma trades failed for {market_id[:12]}: {e}")
+        try:
+            return await self._fetch_trades_clob(market_id, since)
+        except Exception as e:
+            logger.warning(f"[Polymarket] All trade sources failed for {market_id[:12]}: {e}")
+            return []
 
-        return trades
-
-    async def _fetch_trades_clob(
+    async def _fetch_trades_gamma(
         self,
         market_id: str,
         since: Optional[datetime],
     ) -> list[dict]:
+        """Gamma REST API — public, no authentication needed."""
         session = await self._get_session()
-        url = f"{self.clob_base}/trades"
+        url = f"{self.rest_base}/trades"
         params = {"market": market_id, "limit": 50}
         if since:
-            params["after"] = int(since.timestamp())
+            params["after"] = since.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         async with session.get(url, params=params) as resp:
-            if resp.status == 404:
+            if resp.status in (401, 403, 404):
                 return []
             resp.raise_for_status()
             data = await resp.json()
@@ -203,52 +200,37 @@ class PolymarketAdapter:
                 result.append(t)
         return result
 
-    def _normalize_trade(self, raw: dict, market_id: str) -> Optional[dict]:
-        """Normalize a raw CLOB trade record."""
-        try:
-            # Size: CLOB gives "size" in shares, "price" is 0–1 prob
-            price = float(raw.get("price", 0))
-            size_shares = float(raw.get("size", raw.get("amount", 0)))
+    async def _fetch_trades_clob(
+        self,
+        market_id: str,
+        since: Optional[datetime],
+    ) -> list[dict]:
+        """CLOB API — requires auth, fallback only."""
+        session = await self._get_session()
+        url = f"{self.clob_base}/trades"
+        params = {"market": market_id, "limit": 50}
+        if since:
+            params["after"] = int(since.timestamp())
 
-            # notional = shares * price (in USDC)
-            # For Polymarket, 1 share = $1 max, so notional ≈ shares * price
-            size_usd = size_shares * price if price > 0 else size_shares
+        async with session.get(url, params=params) as resp:
+            if resp.status in (401, 403, 404):
+                return []
+            resp.raise_for_status()
+            data = await resp.json()
 
-            # Some endpoints give raw USDC (6 decimals)
-            if size_usd > 1_000_000:
-                size_usd = size_usd / (10 ** USDC_DECIMALS)
+        trades_raw = data if isinstance(data, list) else data.get("data", [])
+        result = []
+        for raw in trades_raw:
+            t = self._normalize_trade(raw, market_id)
+            if t:
+                result.append(t)
+        return result
 
-            ts_raw = raw.get("timestamp", raw.get("created_at", raw.get("time")))
-            if isinstance(ts_raw, (int, float)):
-                ts = datetime.fromtimestamp(ts_raw, tz=timezone.utc)
-            else:
-                ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
-
-            trader = raw.get("maker", raw.get("taker", raw.get("trader", "")))
-            if not trader:
-                return None
-
-            return {
-                "tx_hash": raw.get("transactionHash", raw.get("id", raw.get("hash", ""))),
-                "market_id": market_id,
-                "trader": trader.lower(),
-                "outcome": raw.get("outcome", raw.get("token_id", "YES")),
-                "side": raw.get("side", "BUY").upper(),
-                "size_usd": round(size_usd, 4),
-                "price": round(price, 6),
-                "timestamp": ts,
-                "raw": raw,
-            }
-        except Exception as e:
-            logger.debug(f"[Polymarket] Could not normalize trade: {e} | raw={raw}")
-            return None
-
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Price snapshots
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     async def fetch_price_snapshot(self, market_id: str) -> list[dict]:
-        """Return current best prices per outcome token."""
         session = await self._get_session()
         try:
             url = f"{self.clob_base}/book"
@@ -262,13 +244,12 @@ class PolymarketAdapter:
             for side, key in [("asks", "YES"), ("bids", "NO")]:
                 entries = data.get(side, [])
                 if entries:
-                    best = entries[0]
                     snapshots.append({
                         "market_id": market_id,
                         "outcome": key,
-                        "price": float(best.get("price", 0)),
+                        "price": float(entries[0].get("price", 0)),
                     })
             return snapshots
         except Exception as e:
-            logger.debug(f"[Polymarket] Price snapshot failed for {market_id}: {e}")
+            logger.debug(f"[Polymarket] Price snapshot failed for {market_id[:12]}: {e}")
             return []

@@ -4,15 +4,16 @@ src/db/models.py — SQLAlchemy ORM models
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
-    BigInteger, Boolean, Column, Index, Integer, JSON,
-    Numeric, String, Text, UniqueConstraint
+    BigInteger, Boolean, Column, Integer,
+    Numeric, Text, UniqueConstraint, TIMESTAMP
 )
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
-TIMESTAMPTZ = TIMESTAMP(timezone=True)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase
+
+# TIMESTAMP(timezone=True) is the correct SQLAlchemy equivalent of Postgres TIMESTAMPTZ
+TIMESTAMPTZ = TIMESTAMP(timezone=True)
 
 
 class Base(DeclarativeBase):
@@ -22,14 +23,14 @@ class Base(DeclarativeBase):
 class Market(Base):
     __tablename__ = "markets"
 
-    id          = Column(Text, primary_key=True)
-    title       = Column(Text, nullable=False)
-    slug        = Column(Text)
-    end_time    = Column(TIMESTAMPTZ)
-    is_active   = Column(Boolean, default=True)
+    id           = Column(Text, primary_key=True)
+    title        = Column(Text, nullable=False)
+    slug         = Column(Text)
+    end_time     = Column(TIMESTAMPTZ)
+    is_active    = Column(Boolean, default=True)
     insider_risk = Column(Boolean, default=False)
-    created_at  = Column(TIMESTAMPTZ, default=datetime.utcnow)
-    updated_at  = Column(TIMESTAMPTZ, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at   = Column(TIMESTAMPTZ, default=datetime.utcnow)
+    updated_at   = Column(TIMESTAMPTZ, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
         return f"<Market {self.id[:8]} {self.title[:40]}>"
@@ -41,17 +42,17 @@ class Trade(Base):
         UniqueConstraint("tx_hash", "trader", "market_id", name="uq_trade"),
     )
 
-    id          = Column(BigInteger, primary_key=True, autoincrement=True)
-    tx_hash     = Column(Text, nullable=False)
-    market_id   = Column(Text, nullable=False)
-    trader      = Column(Text, nullable=False)
-    outcome     = Column(Text)
-    side        = Column(Text)
-    size_usd    = Column(Numeric(20, 4))
-    price       = Column(Numeric(10, 6))
-    timestamp   = Column(TIMESTAMPTZ, nullable=False)
-    raw         = Column(JSONB)
-    created_at  = Column(TIMESTAMPTZ, default=datetime.utcnow)
+    id         = Column(BigInteger, primary_key=True, autoincrement=True)
+    tx_hash    = Column(Text, nullable=False)
+    market_id  = Column(Text, nullable=False)
+    trader     = Column(Text, nullable=False)
+    outcome    = Column(Text)
+    side       = Column(Text)
+    size_usd   = Column(Numeric(20, 4))
+    price      = Column(Numeric(10, 6))
+    timestamp  = Column(TIMESTAMPTZ, nullable=False)
+    raw        = Column(JSONB)
+    created_at = Column(TIMESTAMPTZ, default=datetime.utcnow)
 
     def __repr__(self):
         return f"<Trade {self.tx_hash[:10]} {self.trader[:8]} ${self.size_usd}>"
@@ -86,21 +87,21 @@ class WalletProfile(Base):
 class Alert(Base):
     __tablename__ = "alerts"
 
-    id         = Column(BigInteger, primary_key=True, autoincrement=True)
-    market_id  = Column(Text, nullable=False)
-    trader     = Column(Text, nullable=False)
-    score      = Column(Integer, nullable=False)
-    severity   = Column(Text, nullable=False)
-    reasons    = Column(JSONB)
-    trade_ids  = Column(JSONB)
-    sent_at    = Column(TIMESTAMPTZ, default=datetime.utcnow)
+    id        = Column(BigInteger, primary_key=True, autoincrement=True)
+    market_id = Column(Text, nullable=False)
+    trader    = Column(Text, nullable=False)
+    score     = Column(Integer, nullable=False)
+    severity  = Column(Text, nullable=False)
+    reasons   = Column(JSONB)
+    trade_ids = Column(JSONB)
+    sent_at   = Column(TIMESTAMPTZ, default=datetime.utcnow)
 
 
 class PriceSnapshot(Base):
     __tablename__ = "price_snapshots"
 
-    id         = Column(BigInteger, primary_key=True, autoincrement=True)
-    market_id  = Column(Text, nullable=False)
-    outcome    = Column(Text)
-    price      = Column(Numeric(10, 6))
-    timestamp  = Column(TIMESTAMPTZ, default=datetime.utcnow)
+    id        = Column(BigInteger, primary_key=True, autoincrement=True)
+    market_id = Column(Text, nullable=False)
+    outcome   = Column(Text)
+    price     = Column(Numeric(10, 6))
+    timestamp = Column(TIMESTAMPTZ, default=datetime.utcnow)

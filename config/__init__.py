@@ -30,6 +30,9 @@ def load_config() -> dict[str, Any]:
     with open(path) as f:
         cfg = yaml.safe_load(f)
 
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url:
+        cfg.setdefault("database", {})["url"] = db_url
     _validate(cfg)
     return cfg
 

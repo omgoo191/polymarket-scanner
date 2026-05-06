@@ -1,0 +1,47 @@
+---
+- name: Base VPS setup
+  hosts: vps
+  become: true
+
+  tasks:
+    - name: Update apt and install base packages
+      apt:
+        update_cache: yes
+        name:
+          - curl
+          - git
+          - ufw
+          - htop
+          - apt-transport-https
+        state: present
+
+    - name: Allow SSH
+      ufw:
+        rule: allow
+        port: "22"
+
+    - name: Allow HTTP
+      ufw:
+        rule: allow
+        port: "80"
+
+    - name: Allow HTTPS
+      ufw:
+        rule: allow
+        port: "443"
+
+    - name: Allow k3s API
+      ufw:
+        rule: allow
+        port: "6443"
+
+    - name: Allow WireGuard
+      ufw:
+        rule: allow
+        port: "51820"
+        proto: udp
+
+    - name: Enable ufw
+      ufw:
+        state: enabled
+        policy: deny

@@ -1,0 +1,18 @@
+---
+- name: argocd install
+  hosts: vps
+  become: true
+
+  tasks:
+    - name: create namespace for argocd
+      shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: apply argocd manifest
+      shell: |
+        kubectl apply -n argocd -f \
+        https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+    - name: Wait for argocd is up
+      shell: |
+        kubectl wait --for=condition=available deployment/argocd-server \
+        -n argocd --timeout=120s
