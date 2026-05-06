@@ -1,7 +1,7 @@
 image:
   repository: ghcr.io/omgoo191/radar
   tag: latest
-  pullPolicy: always
+  pullPolicy: Always
 
 env:
   DATABASE_URL: "postgresql+asyncpg://radar:111@postgres:5432/radardb"
