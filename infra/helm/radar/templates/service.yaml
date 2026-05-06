@@ -8,6 +8,7 @@ spec:
     app: radar
   ports:
     - port: 8080
+      name: http
       targetPort: 8080
     - port: 8000
       targetPort: 8000
