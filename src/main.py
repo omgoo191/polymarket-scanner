@@ -10,7 +10,11 @@ Runtime flow:
   6. Telegram notify   — send if score ≥ threshold and not rate-limited
 """
 from __future__ import annotations
-
+from src.core.metrics import (
+    cycles_total, trades_processed_total,
+    alerts_sent_total, api_errors_total,
+    markets_monitored, start_metrics_server
+)
 import asyncio
 import logging
 import sys
@@ -29,7 +33,11 @@ from src.db import repository as repo
 from src.notifications.telegram import TelegramNotifier
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
-
+from src.core.metrics import (
+    cycles_total, trades_processed_total,
+    alerts_sent_total, api_errors_total,
+    markets_monitored, start_metrics_server
+)
 structlog.configure(
     processors=[
         structlog.stdlib.add_log_level,
@@ -47,6 +55,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("radar.main")
 
+start_metrics_server(port=8000)
+logger.info("Metrics server started on :8000")
 
 # ── Pipeline class ────────────────────────────────────────────────────────────
 
@@ -111,8 +121,9 @@ class SmartMoneyRadar:
 
     async def _run_cycle(self):
         self._cycle += 1
-        logger.info(f"── Cycle {self._cycle} ──────────────────────────────")
+        cycles_total.inc()
 
+        logger.info(f"── Cycle {self._cycle} ──────────────────────────────")
         # 1. Market discovery (every N cycles)
         if self._cycle == 1 or self._cycle % self._market_refresh_every == 0:
             await self._refresh_markets()
@@ -156,7 +167,7 @@ class SmartMoneyRadar:
 
             insider_markets = await repo.get_insider_risk_markets(session)
             self._markets_cache = {m.id: m for m in insider_markets}
-
+            markets_monitored.set(len(self._markets_cache))
         logger.info(f"Market cache: {len(self._markets_cache)} insider-risk markets")
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -339,7 +350,8 @@ class SmartMoneyRadar:
         )
 
         sent = await self.notifier.send_alert(short_msg, long_msg)
-
+        if sent:
+            alerts_sent_total.labels(severity=signal.severity).inc()
         if sent:
             async with db_session.get_session() as session:
                 await repo.save_alert(session, {

@@ -19,6 +19,9 @@ spec:
         - name: radar
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy}}
+          ports:
+            - containerPort: 8000
+              name: metrics
           env:
             - name: DATABASE_URL
               value: {{ .Values.env.DATABASE_URL}}
