@@ -1,0 +1,14 @@
+image:
+  repository: ghcr.io/omgoo191/radar
+  tag: latest
+  pullPolicy: always
+
+env:
+  DATABASE_URL: "postgresql+asyncpg://radar:111@postgres:5432/radardb"
+
+secrets:
+  telegramBotToken: ""
+  telegramChatId: ""
+  polygonscanApiKey: ""
+
+replicaCount: 1

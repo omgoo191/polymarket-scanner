@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radar
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: radar
+  template:
+    metadata:
+      labels:
+        app: radar
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: radar
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy}}
+          env:
+            - name: DATABASE_URL
+              value: {{ .Values.env.DATABASE_URL}}
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: radar-secrets
+                  key: telegramBotToken
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: radar-secrets
+                  key: telegramChatId
+            - name: POLYGON_SCAN_API
+              valueFrom:
+                secretKeyRef:
+                  name: radar-secrets
+                  key: polygonscanApiKey
