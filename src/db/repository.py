@@ -24,6 +24,7 @@ async def upsert_market(session: AsyncSession, market: dict) -> None:
     stmt = stmt.on_conflict_do_update(
         index_elements=["id"],
         set_={
+            "condition_id": stmt.excluded.condition_id,
             "title": stmt.excluded.title,
             "is_active": stmt.excluded.is_active,
             "insider_risk": stmt.excluded.insider_risk,

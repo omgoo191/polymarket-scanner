@@ -177,8 +177,11 @@ class SmartMoneyRadar:
         new_trade_records = []
 
         for market in markets:
-            trades_raw = await self.polymarket.fetch_trades(market.id, since=since)
-
+            trades_raw = await self.polymarket.fetch_trades(
+                market.id,
+                condition_id=market.condition_id or "",
+                since=since,
+            )
             async with db_session.get_session() as session:
                 # Save price snapshot if available
                 snapshots = await self.polymarket.fetch_price_snapshot(market.id)

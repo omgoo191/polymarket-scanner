@@ -31,6 +31,7 @@ class Market(Base):
     insider_risk = Column(Boolean, default=False)
     created_at   = Column(TIMESTAMPTZ, default=datetime.utcnow)
     updated_at   = Column(TIMESTAMPTZ, default=datetime.utcnow, onupdate=datetime.utcnow)
+    condition_id = Column(Text)
 
     def __repr__(self):
         return f"<Market {self.id[:8]} {self.title[:40]}>"

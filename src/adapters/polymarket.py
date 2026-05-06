@@ -121,6 +121,7 @@ class PolymarketAdapter:
 
         return {
             "id": str(raw.get("id", raw.get("conditionId", ""))),
+            "condition_id": raw.get("conditionId", ""),
             "title": raw.get("question", raw.get("title", "")),
             "slug": raw.get("slug", ""),
             "end_time": end_time,
@@ -158,13 +159,13 @@ class PolymarketAdapter:
     # -------------------------------------------------------------------------
 
     async def fetch_trades(
-        self,
-        market_id: str,
-        since: Optional[datetime] = None,
+            self,
+            market_id: str,
+            condition_id: str = "",
+            since: Optional[datetime] = None,
     ) -> list[dict]:
-        # Gamma REST is public (no auth). CLOB requires auth — fallback only.
         try:
-            trades = await self._fetch_trades_gamma(market_id, since)
+            trades = await self._fetch_trades_gamma(market_id, condition_id, since)
             if trades:
                 return trades
         except Exception as e:
@@ -178,9 +179,9 @@ class PolymarketAdapter:
     async def _fetch_trades_gamma(
             self,
             market_id: str,
+            condition_id: str,
             since: Optional[datetime],
     ) -> list[dict]:
-        """data-api.polymarket.com — public, no authentication needed."""
         session = await self._get_session()
         url = f"{self.data_base}/trades"
         params = {"limit": 50}
@@ -196,6 +197,8 @@ class PolymarketAdapter:
         trades_raw = data if isinstance(data, list) else data.get("data", [])
         result = []
         for raw in trades_raw:
+            if raw.get("conditionId") != condition_id:
+                continue
             t = self._normalize_trade(raw, market_id)
             if t:
                 result.append(t)
