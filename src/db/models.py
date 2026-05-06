@@ -26,12 +26,12 @@ class Market(Base):
     id           = Column(Text, primary_key=True)
     title        = Column(Text, nullable=False)
     slug         = Column(Text)
+    condition_id = Column(Text)
     end_time     = Column(TIMESTAMPTZ)
     is_active    = Column(Boolean, default=True)
     insider_risk = Column(Boolean, default=False)
     created_at   = Column(TIMESTAMPTZ, default=datetime.utcnow)
     updated_at   = Column(TIMESTAMPTZ, default=datetime.utcnow, onupdate=datetime.utcnow)
-    condition_id = Column(Text)
 
     def __repr__(self):
         return f"<Market {self.id[:8]} {self.title[:40]}>"
