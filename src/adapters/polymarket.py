@@ -28,6 +28,7 @@ class PolymarketAdapter:
         cfg = load_config()
         self.rest_base = cfg["polymarket"]["rest_base_url"].rstrip("/")
         self.clob_base = cfg["polymarket"]["clob_base_url"].rstrip("/")
+        self.data_base = "https://data-api.polymarket.com"
         self.markets_limit = cfg["polymarket"].get("markets_limit", 100)
         self.insider_keywords: list[str] = [
             kw.lower() for kw in cfg.get("insider_keywords", [])
@@ -175,16 +176,16 @@ class PolymarketAdapter:
             return []
 
     async def _fetch_trades_gamma(
-        self,
-        market_id: str,
-        since: Optional[datetime],
+            self,
+            market_id: str,
+            since: Optional[datetime],
     ) -> list[dict]:
-        """Gamma REST API — public, no authentication needed."""
+        """data-api.polymarket.com — public, no authentication needed."""
         session = await self._get_session()
-        url = f"{self.rest_base}/trades"
-        params = {"market": market_id, "limit": 50}
+        url = f"{self.data_base}/trades"
+        params = {"limit": 50}
         if since:
-            params["after"] = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+            params["startTs"] = int(since.timestamp())
 
         async with session.get(url, params=params) as resp:
             if resp.status in (401, 403, 404):
@@ -225,6 +226,43 @@ class PolymarketAdapter:
             if t:
                 result.append(t)
         return result
+
+    def _normalize_trade(self, raw: dict, market_id: str) -> Optional[dict]:
+        try:
+            # Filter by market
+            if raw.get("conditionId") != market_id and raw.get("market") != market_id:
+                return None
+
+            price = float(raw.get("price", 0))
+            size_shares = float(raw.get("size", raw.get("amount", 0)))
+            size_usd = size_shares * price if price > 0 else size_shares
+            if size_usd > 1_000_000:
+                size_usd = size_usd / (10 ** USDC_DECIMALS)
+
+            ts_raw = raw.get("timestamp", raw.get("created_at", raw.get("time")))
+            if isinstance(ts_raw, (int, float)):
+                ts = datetime.fromtimestamp(ts_raw, tz=timezone.utc)
+            else:
+                ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+
+            trader = raw.get("proxyWallet", raw.get("maker", raw.get("taker", raw.get("trader", ""))))
+            if not trader:
+                return None
+
+            return {
+                "tx_hash": raw.get("transactionHash", raw.get("id", raw.get("hash", ""))),
+                "market_id": market_id,
+                "trader": trader.lower(),
+                "outcome": raw.get("outcome", raw.get("token_id", "YES")),
+                "side": raw.get("side", "BUY").upper(),
+                "size_usd": round(size_usd, 4),
+                "price": round(price, 6),
+                "timestamp": ts,
+                "raw": raw,
+            }
+        except Exception as e:
+            logger.debug(f"[Polymarket] Could not normalize trade: {e}")
+            return None
 
     # -------------------------------------------------------------------------
     # Price snapshots
