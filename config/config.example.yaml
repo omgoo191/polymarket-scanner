@@ -45,7 +45,7 @@ scoring:
 
 alerts:
   rate_limit_minutes: 30      # min gap between alerts for same market+trader
-  min_trade_size_usd: 5000    # ignore trades below this (reduce noise)
+  min_trade_size_usd: 1000    # ignore trades below this (reduce noise)
 
 # Keywords that flag a market as "insider-risk"
 insider_keywords:
