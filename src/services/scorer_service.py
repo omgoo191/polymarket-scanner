@@ -41,8 +41,7 @@ class ScorerService:
                 logger.error(f"[Scorer] Error processing message: {e}", exc_info=True)
 
     async def _process(self, msg: dict):
-        async def _process(self, msg: dict):
-            logger.info(f"[Scorer] Processing trade {msg['tx_hash'][:10]} size=${msg['size_usd']}")
+        logger.info(f"[Scorer] Got message: {msg.get('tx_hash', '')[:10]}")
         trader = msg["trader"]
         trade_ts = datetime.fromisoformat(msg["timestamp"])
         if trade_ts.tzinfo is None:
