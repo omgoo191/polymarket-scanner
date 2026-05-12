@@ -158,6 +158,7 @@ class SmartMoneyRadar:
             for m in markets:
                 await repo.upsert_market(session, {
                     "id": m["id"],
+                    "condition_id": m.get("condition_id", ""),
                     "title": m["title"],
                     "slug": m.get("slug", ""),
                     "end_time": m.get("end_time"),
