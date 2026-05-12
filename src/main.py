@@ -177,7 +177,7 @@ class SmartMoneyRadar:
         new_trade_records = []
 
         # Один запрос для всех рынков
-        all_trades = await self.polymarket.fetch_all_recent_trades(since)
+        all_trades = await self.polymarket.fetch_all_recent_trades(None)
 
         # Индекс condition_id → market
         condition_map = {

@@ -298,7 +298,7 @@ class PolymarketAdapter:
     async def fetch_all_recent_trades(self, since: Optional[datetime] = None) -> list[dict]:
         session = await self._get_session()
         url = f"{self.data_base}/trades"
-        params = {"limit": 100}
+        params = {"limit": 500}
         if since:
             params["startTs"] = int(since.timestamp())
 
