@@ -195,12 +195,9 @@ class PolymarketAdapter:
             data = await resp.json()
 
         trades_raw = data if isinstance(data, list) else data.get("data", [])
-        logger.info(f"[Polymarket] data-api returned {len(trades_raw)} trades total, condition_id={condition_id[:12]}")
-        matched = [r for r in trades_raw if r.get("conditionId") == condition_id]
-        logger.info(f"[Polymarket] matched {len(matched)} trades for this market")
         result = []
         for raw in trades_raw:
-            if raw.get("conditionId") != condition_id:
+            if condition_id and raw.get("conditionId") != condition_id:
                 continue
             t = self._normalize_trade(raw, market_id)
             if t:
@@ -297,3 +294,55 @@ class PolymarketAdapter:
         except Exception as e:
             logger.debug(f"[Polymarket] Price snapshot failed for {market_id[:12]}: {e}")
             return []
+
+    async def fetch_all_recent_trades(self, since: Optional[datetime] = None) -> list[dict]:
+        session = await self._get_session()
+        url = f"{self.data_base}/trades"
+        params = {"limit": 100}
+        if since:
+            params["startTs"] = int(since.timestamp())
+
+        async with session.get(url, params=params) as resp:
+            if resp.status in (401, 403, 404):
+                return []
+            resp.raise_for_status()
+            data = await resp.json()
+
+        trades_raw = data if isinstance(data, list) else data.get("data", [])
+        result = []
+        for raw in trades_raw:
+            t = self._normalize_trade_global(raw)
+            if t:
+                result.append(t)
+        return result
+
+    def _normalize_trade_global(self, raw: dict) -> Optional[dict]:
+        try:
+            price = float(raw.get("price", 0))
+            size_shares = float(raw.get("size", 0))
+            size_usd = size_shares * price if price > 0 else size_shares
+
+            ts_raw = raw.get("timestamp")
+            if isinstance(ts_raw, (int, float)):
+                ts = datetime.fromtimestamp(ts_raw, tz=timezone.utc)
+            else:
+                return None
+
+            trader = raw.get("proxyWallet", "")
+            if not trader:
+                return None
+
+            return {
+                "conditionId": raw.get("conditionId", ""),
+                "tx_hash": raw.get("transactionHash", ""),
+                "trader": trader.lower(),
+                "outcome": raw.get("outcome", "YES"),
+                "side": raw.get("side", "BUY").upper(),
+                "size_usd": round(size_usd, 4),
+                "price": round(price, 6),
+                "timestamp": ts,
+                "raw": raw,
+            }
+        except Exception as e:
+            logger.debug(f"[Polymarket] Could not normalize trade: {e}")
+            return None

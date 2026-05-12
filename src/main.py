@@ -174,43 +174,42 @@ class SmartMoneyRadar:
     # ─────────────────────────────────────────────────────────────────────────
 
     async def _poll_trades(self, markets, since: datetime) -> list[dict]:
-        """Fetch and store trades for all insider markets. Return new ones."""
         new_trade_records = []
 
-        for market in markets:
-            trades_raw = await self.polymarket.fetch_trades(
-                market.id,
-                condition_id=market.condition_id or "",
-                since=since,
-            )
-            async with db_session.get_session() as session:
-                # Save price snapshot if available
-                snapshots = await self.polymarket.fetch_price_snapshot(market.id)
-                for snap in snapshots:
-                    await repo.save_price_snapshot(
-                        session, snap["market_id"], snap["outcome"], snap["price"]
-                    )
+        # Один запрос для всех рынков
+        all_trades = await self.polymarket.fetch_all_recent_trades(since)
 
-                for trade in trades_raw:
-                    if float(trade.get("size_usd", 0)) < self.min_trade_size:
-                        continue
+        # Индекс condition_id → market
+        condition_map = {
+            m.condition_id: m for m in markets if m.condition_id
+        }
 
-                    new_id = await repo.insert_trade_if_new(session, {
-                        "tx_hash": trade["tx_hash"],
-                        "market_id": trade["market_id"],
-                        "trader": trade["trader"],
-                        "outcome": trade.get("outcome", "YES"),
-                        "side": trade.get("side", "BUY"),
-                        "size_usd": trade["size_usd"],
-                        "price": trade["price"],
-                        "timestamp": trade["timestamp"],
-                        "raw": trade.get("raw"),
-                    })
+        async with db_session.get_session() as session:
+            for trade in all_trades:
+                condition_id = trade.get("conditionId", "")
+                market = condition_map.get(condition_id)
+                if not market:
+                    continue
 
-                    if new_id is not None:
-                        trade["_db_id"] = new_id
-                        trade["_market"] = market
-                        new_trade_records.append(trade)
+                if float(trade.get("size_usd", 0)) < self.min_trade_size:
+                    continue
+
+                new_id = await repo.insert_trade_if_new(session, {
+                    "tx_hash": trade["tx_hash"],
+                    "market_id": market.id,
+                    "trader": trade["trader"],
+                    "outcome": trade.get("outcome", "YES"),
+                    "side": trade.get("side", "BUY"),
+                    "size_usd": trade["size_usd"],
+                    "price": trade["price"],
+                    "timestamp": trade["timestamp"],
+                    "raw": trade.get("raw"),
+                })
+
+                if new_id is not None:
+                    trade["_db_id"] = new_id
+                    trade["_market"] = market
+                    new_trade_records.append(trade)
 
         return new_trade_records
 
