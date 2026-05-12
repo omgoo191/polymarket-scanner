@@ -195,6 +195,9 @@ class PolymarketAdapter:
             data = await resp.json()
 
         trades_raw = data if isinstance(data, list) else data.get("data", [])
+        logger.info(f"[Polymarket] data-api returned {len(trades_raw)} trades total, condition_id={condition_id[:12]}")
+        matched = [r for r in trades_raw if r.get("conditionId") == condition_id]
+        logger.info(f"[Polymarket] matched {len(matched)} trades for this market")
         result = []
         for raw in trades_raw:
             if raw.get("conditionId") != condition_id:
