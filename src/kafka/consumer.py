@@ -28,6 +28,9 @@ class RadarConsumer:
             group_id=self.group_id,
             value_deserializer=lambda v: json.loads(v.decode("utf-8")),
             auto_offset_reset="latest",
+            session_timeout_ms=60000,  # 60 секунд
+            heartbeat_interval_ms=20000,  # каждые 20 секунд
+            max_poll_interval_ms=300000,  # 5 минут на обработку одного сообщения
         )
         await self._consumer.start()
         logger.info(f"[Kafka] Consumer started — topic={self.topic} group={self.group_id}")
