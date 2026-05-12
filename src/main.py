@@ -184,6 +184,8 @@ class SmartMoneyRadar:
             m.condition_id: m for m in markets if m.condition_id
         }
 
+        logger.info(f"[Poll] condition_map has {len(condition_map)} entries")
+        logger.info(f"[Poll] fetched {len(all_trades)} global trades")
         async with db_session.get_session() as session:
             for trade in all_trades:
                 condition_id = trade.get("conditionId", "")
