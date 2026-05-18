@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/omgoo191/radar
-  tag: sha-b9b3298131875f15242edeba7812ec032754d8a2
+  tag: sha-76c1e1eb8215696a0ec95ec71e4ea4e187cc1131
   pullPolicy: Always
 
 env:
