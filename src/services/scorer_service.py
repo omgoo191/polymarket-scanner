@@ -111,7 +111,7 @@ class ScorerService:
             funding_minutes_before=funding_minutes_before,
             price_before=price_before,
         )
-
+        logger.info(f"[Scorer] score={signal.score} severity={signal.severity} trader={trader[:10]}")
         if signal.severity in (SEVERITY_NONE, SEVERITY_LOW):
             return
 
