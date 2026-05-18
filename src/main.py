@@ -1,9 +1,6 @@
 """
-src/main.py — Pipeline orchestrator (Kafka-based)
-Запускает три сервиса параллельно:
-  CollectorService  — собирает трейды → raw-trades
-  ScorerService     — raw-trades → scored-trades
-  NotifierService   — scored-trades → Telegram
+src/main.py — Pipeline orchestrator
+Modes: all | collector | scorer | notifier
 """
 from __future__ import annotations
 
@@ -23,8 +20,6 @@ from src.services.collector import CollectorService
 from src.services.scorer_service import ScorerService
 from src.services.notifier_service import NotifierService
 
-# ── Logging setup ─────────────────────────────────────────────────────────────
-
 structlog.configure(
     processors=[
         structlog.stdlib.add_log_level,
@@ -43,23 +38,71 @@ logging.basicConfig(
 logger = logging.getLogger("radar.main")
 
 
-async def run():
-    logger.info("=== Polymarket Smart Money Radar (Kafka) starting ===")
-
-    # Preflight
+async def _preflight():
     notifier = TelegramNotifier()
     if not await notifier.test_connection():
         logger.error("Telegram connection failed.")
-        return
-
+        sys.exit(1)
     await db_session.create_all_tables()
     logger.info("Database ready.")
-    await notifier.send_startup_message()
+    return notifier
 
+
+async def run_collector():
+    logger.info("=== Collector starting ===")
+    await _preflight()
     start_metrics_server(port=8000)
-    logger.info("Metrics server started on :8000")
 
-    # Kafka
+    producer = RadarProducer()
+    await producer.start()
+
+    try:
+        await CollectorService(producer).run()
+    finally:
+        await producer.stop()
+        await db_session.dispose()
+
+
+async def run_scorer():
+    logger.info("=== Scorer starting ===")
+    await db_session.create_all_tables()
+
+    consumer = RadarConsumer(topic="raw-trades", group_id="scorer-group")
+    producer = RadarProducer()
+    await consumer.start()
+    await producer.start()
+
+    try:
+        await ScorerService(consumer, producer).run()
+    finally:
+        await consumer.stop()
+        await producer.stop()
+        await db_session.dispose()
+
+
+async def run_notifier():
+    logger.info("=== Notifier starting ===")
+    await db_session.create_all_tables()
+
+    notifier = TelegramNotifier()
+    await notifier.test_connection()
+
+    consumer = RadarConsumer(topic="scored-trades", group_id="notifier-group")
+    await consumer.start()
+
+    try:
+        await NotifierService(consumer).run()
+    finally:
+        await consumer.stop()
+        await db_session.dispose()
+
+
+async def run_all():
+    logger.info("=== Polymarket Smart Money Radar starting ===")
+    notifier = await _preflight()
+    await notifier.send_startup_message()
+    start_metrics_server(port=8000)
+
     producer = RadarProducer()
     await producer.start()
 
@@ -68,16 +111,11 @@ async def run():
     await raw_consumer.start()
     await scored_consumer.start()
 
-    # Services
-    collector = CollectorService(producer)
-    scorer = ScorerService(raw_consumer, producer)
-    notifier_svc = NotifierService(scored_consumer)
-
     try:
         await asyncio.gather(
-            collector.run(),
-            scorer.run(),
-            notifier_svc.run(),
+            CollectorService(producer).run(),
+            ScorerService(raw_consumer, producer).run(),
+            NotifierService(scored_consumer).run(),
         )
     finally:
         await producer.stop()
@@ -87,8 +125,22 @@ async def run():
 
 
 def main():
+    mode = sys.argv[1] if len(sys.argv) > 1 else "all"
+    logger.info(f"Starting in mode: {mode}")
+
+    modes = {
+        "collector": run_collector,
+        "scorer": run_scorer,
+        "notifier": run_notifier,
+        "all": run_all,
+    }
+
+    if mode not in modes:
+        logger.error(f"Unknown mode: {mode}. Use: collector | scorer | notifier | all")
+        sys.exit(1)
+
     try:
-        asyncio.run(run())
+        asyncio.run(modes[mode]())
     except KeyboardInterrupt:
         logger.info("Radar stopped.")
 
