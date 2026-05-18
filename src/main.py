@@ -50,7 +50,7 @@ async def _preflight():
 
 async def run_collector():
     logger.info("=== Collector starting ===")
-    await _preflight()
+    notifier = await _preflight()
     await notifier.send_startup_message()
     start_metrics_server(port=8000)
 
