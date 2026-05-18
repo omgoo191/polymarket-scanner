@@ -8,6 +8,12 @@ from datetime import timezone
 
 from src.core.scorer import ScoredSignal, SEVERITY_STRONG, SEVERITY_MEDIUM
 
+CATEGORY_EMOJI = {
+    "politics": "🏛️",
+    "sports": "⚽",
+    "crypto": "₿",
+}
+
 
 SEVERITY_EMOJI = {
     SEVERITY_STRONG: "🚨",
@@ -45,9 +51,10 @@ class Summarizer:
         emoji = SEVERITY_EMOJI.get(signal.severity, "🔍")
         outcome_emoji = OUTCOME_EMOJI.get(signal.outcome.upper(), "")
 
+        cat_emoji = CATEGORY_EMOJI.get(signal.category, "🔍")
         lines = [
             f"{emoji} *{signal.severity} SIGNAL* [Score: {signal.score}/100]",
-            f"📊 {signal.market_title}",
+            f"{cat_emoji} {signal.market_title}",
             "",
         ]
 

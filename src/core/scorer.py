@@ -1,14 +1,9 @@
 """
 src/core/scorer.py
-Computes the Signal Score (0–100) from observed features.
+Computes Signal Score (0–100) with category-aware thresholds.
 
-Score breakdown:
-  SizeScore         0–30  larger notional → higher
-  TimingScore       0–20  closer to deadline → higher
-  WalletHistoryScore 0–15 new / low activity wallet → higher
-  FundingScore      0–15  recent funding before bet → higher
-  ImpactScore       0–10  large trade, small price move → higher
-  ClusterScore      0–10  same funder, multiple wallets → higher
+Categories: politics, sports, crypto (default: politics)
+Each category has different size thresholds and score thresholds.
 """
 from __future__ import annotations
 
@@ -28,15 +23,16 @@ class ScoredSignal:
     market_id: str
     market_title: str
     score: int
-    severity: str                    # STRONG / MEDIUM / LOW / NONE
-    triggered_features: dict         # feature_name → (points, explanation)
+    severity: str
+    triggered_features: dict
     trade_ids: list[int]
     trade_size_usd: float
     trade_price: float
     trade_timestamp: datetime
     tx_hash: str
     outcome: str
-    reasons: list[str] = field(default_factory=list)  # filled by summarizer
+    category: str = "politics"
+    reasons: list[str] = field(default_factory=list)
 
 
 SEVERITY_NONE   = "NONE"
@@ -46,16 +42,20 @@ SEVERITY_STRONG = "STRONG"
 
 
 class Scorer:
-    """
-    Stateless scoring engine. Call score_trade() for each new trade.
-    """
 
     def __init__(self):
         cfg = load_config()
-        scoring = cfg.get("scoring", {})
-        self.strong_threshold = scoring.get("strong_threshold", 70)
-        self.medium_threshold = scoring.get("medium_threshold", 55)
-        weights = scoring.get("weights", {})
+        self.categories = cfg.get("categories", {})
+
+        # Fallback defaults if no categories in config
+        self._default_size = {
+            "small": 1000, "medium": 3000,
+            "large": 10000, "very_large": 30000
+        }
+        self._default_thresholds = {"medium": 35, "strong": 50}
+
+        # Feature weights stay fixed
+        weights = cfg.get("scoring", {}).get("weights", {})
         self.w_size    = weights.get("size", 30)
         self.w_timing  = weights.get("timing", 20)
         self.w_wallet  = weights.get("wallet_history", 15)
@@ -63,10 +63,27 @@ class Scorer:
         self.w_impact  = weights.get("impact", 10)
         self.w_cluster = weights.get("cluster", 10)
 
+    def detect_category(self, market_title: str) -> str:
+        title_lower = market_title.lower()
+        for category, cfg in self.categories.items():
+            keywords = [kw.lower() for kw in cfg.get("keywords", [])]
+            if any(kw in title_lower for kw in keywords):
+                return category
+        return "politics"  # default
+
+    def _get_size_thresholds(self, category: str) -> dict:
+        return self.categories.get(category, {}).get(
+            "size_thresholds", self._default_size
+        )
+
+    def _get_score_thresholds(self, category: str) -> dict:
+        return self.categories.get(category, {}).get(
+            "score_thresholds", self._default_thresholds
+        )
+
     def score_trade(
         self,
         *,
-        # Required
         trade_id: int,
         tx_hash: str,
         market_id: str,
@@ -77,7 +94,6 @@ class Scorer:
         price: float,
         trade_timestamp: datetime,
         outcome: str,
-        # Optional enrichment
         wallet_age_days: Optional[float] = None,
         wallet_total_trades: Optional[int] = None,
         wallet_total_volume: Optional[float] = None,
@@ -86,11 +102,15 @@ class Scorer:
         price_before: Optional[float] = None,
         co_funded_wallets_active: Optional[int] = None,
     ) -> ScoredSignal:
+        category = self.detect_category(market_title)
+        size_thresholds = self._get_size_thresholds(category)
+        score_thresholds = self._get_score_thresholds(category)
+
         features = {}
         total = 0
 
         # ── 1. SizeScore (0–30) ──────────────────────────────────────────────
-        size_pts, size_note = self._size_score(size_usd)
+        size_pts, size_note = self._size_score(size_usd, size_thresholds)
         if size_pts > 0:
             features["size"] = (size_pts, size_note)
             total += size_pts
@@ -118,7 +138,9 @@ class Scorer:
             total += funding_pts
 
         # ── 5. ImpactScore (0–10) ────────────────────────────────────────────
-        impact_pts, impact_note = self._impact_score(size_usd, price, price_before)
+        impact_pts, impact_note = self._impact_score(
+            size_usd, price, price_before, size_thresholds
+        )
         if impact_pts > 0:
             features["impact"] = (impact_pts, impact_note)
             total += impact_pts
@@ -130,11 +152,11 @@ class Scorer:
             total += cluster_pts
 
         score = min(total, 100)
-        severity = self._severity(score)
+        severity = self._severity(score, score_thresholds)
 
         logger.debug(
             f"[Scorer] {trader[:8]} | {market_title[:40]} | "
-            f"score={score} severity={severity} features={list(features.keys())}"
+            f"category={category} score={score} severity={severity}"
         )
 
         return ScoredSignal(
@@ -150,27 +172,29 @@ class Scorer:
             trade_timestamp=trade_timestamp,
             tx_hash=tx_hash,
             outcome=outcome,
+            category=category,
         )
 
     # ─────────────────────────────────────────────────────────────────────────
     # Feature scorers
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _size_score(self, size_usd: float) -> tuple[int, str]:
-        """
-        Tiered: larger bet → more points.
-        $5k–$20k → 10, $20k–$50k → 18, $50k–$100k → 24, $100k+ → 30
-        """
-        if size_usd >= 100_000:
+    def _size_score(self, size_usd: float, thresholds: dict) -> tuple[int, str]:
+        very_large = thresholds.get("very_large", 30000)
+        large      = thresholds.get("large", 10000)
+        medium     = thresholds.get("medium", 3000)
+        small      = thresholds.get("small", 1000)
+
+        if size_usd >= very_large:
             return self.w_size, f"Very large entry: ~${size_usd:,.0f}"
-        elif size_usd >= 50_000:
+        elif size_usd >= large:
             pts = int(self.w_size * 0.80)
             return pts, f"Large entry: ~${size_usd:,.0f}"
-        elif size_usd >= 20_000:
-            pts = int(self.w_size * 0.60)
+        elif size_usd >= medium:
+            pts = int(self.w_size * 0.50)
             return pts, f"Notable entry: ~${size_usd:,.0f}"
-        elif size_usd >= 5_000:
-            pts = int(self.w_size * 0.33)
+        elif size_usd >= small:
+            pts = int(self.w_size * 0.25)
             return pts, f"Entry: ~${size_usd:,.0f}"
         else:
             return 0, ""
@@ -189,7 +213,7 @@ class Scorer:
         hours_to_end = (end_time - trade_ts).total_seconds() / 3600
 
         if hours_to_end < 0:
-            return 0, ""  # market already ended
+            return 0, ""
         elif hours_to_end <= 6:
             return self.w_timing, f"Placed within ~{hours_to_end:.1f}h of deadline"
         elif hours_to_end <= 24:
@@ -259,22 +283,21 @@ class Scorer:
         size_usd: float,
         price_after: float,
         price_before: Optional[float],
+        thresholds: dict,
     ) -> tuple[int, str]:
-        """
-        High size + low price impact → possible careful accumulation.
-        Only fire if trade is large enough to matter.
-        """
-        if price_before is None or size_usd < 10_000:
+        large = thresholds.get("large", 10000)
+        if price_before is None or size_usd < large:
             return 0, ""
 
         impact_pct = abs(price_after - price_before) / max(price_before, 0.01) * 100
+        very_large = thresholds.get("very_large", 30000)
 
-        if impact_pct < 0.5 and size_usd >= 50_000:
+        if impact_pct < 0.5 and size_usd >= very_large:
             return self.w_impact, (
                 f"High size (${size_usd:,.0f}) with low price impact "
                 f"({impact_pct:.1f}%) — possible accumulation"
             )
-        elif impact_pct < 1.0 and size_usd >= 20_000:
+        elif impact_pct < 1.0 and size_usd >= large:
             pts = int(self.w_impact * 0.50)
             return pts, (
                 f"${size_usd:,.0f} trade with minimal price impact ({impact_pct:.1f}%)"
@@ -289,10 +312,12 @@ class Scorer:
             f"{co_funded_wallets} wallets funded by same source acting on this market"
         )
 
-    def _severity(self, score: int) -> str:
-        if score >= self.strong_threshold:
+    def _severity(self, score: int, thresholds: dict) -> str:
+        strong = thresholds.get("strong", 50)
+        medium = thresholds.get("medium", 35)
+        if score >= strong:
             return SEVERITY_STRONG
-        elif score >= self.medium_threshold:
+        elif score >= medium:
             return SEVERITY_MEDIUM
         elif score > 0:
             return SEVERITY_LOW

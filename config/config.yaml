@@ -21,68 +21,112 @@ database:
 polymarket:
   rest_base_url: "https://gamma-api.polymarket.com"
   clob_base_url: "https://clob.polymarket.com"
-  data_base_url: "https://data-api.polymarket.com"
   markets_limit: 100
 
 polling:
-  interval_seconds: 60        # main poll interval
-  trades_lookback_minutes: 10 # how far back to fetch trades each cycle
+  interval_seconds: 60
+  trades_lookback_minutes: 10
 
 funding:
-  lookback_minutes: 180       # how far back to look for wallet funding
-
-scoring:
-  strong_threshold: 70
-  medium_threshold: 55
-  # Feature weights (must sum to 100)
-  weights:
-    size: 30
-    timing: 20
-    wallet_history: 15
-    funding: 15
-    impact: 10
-    cluster: 10
+  lookback_minutes: 180
 
 alerts:
-  rate_limit_minutes: 30      # min gap between alerts for same market+trader
-  min_trade_size_usd: 1000    # ignore trades below this (reduce noise)
+  rate_limit_minutes: 30
+  min_trade_size_usd: 1000
 
-# Keywords that flag a market as "insider-risk"
-insider_keywords:
-  - election
-  - president
-  - congress
-  - senate
-  - governor
-  - prime minister
-  - chancellor
-  - referendum
-  - impeach
-  - resign
-  - acquire
-  - merger
-  - acquisition
-  - antitrust
-  - approved
-  - blocked
-  - deal close
-  - sanctions
-  - tariff
-  - treaty
-  - invasion
-  - military
-  - coup
-  - arrest
-  - indict
-  - charged
-  - verdict
-  - ruling
-  - appointed
-  - nominated
-  - fired
-  - resign
-  - crypto
-  - bitcoin
-  - etf approved
-  - fed rate
-  - interest rate
+categories:
+  politics:
+    keywords:
+      - election
+      - president
+      - congress
+      - senate
+      - governor
+      - prime minister
+      - chancellor
+      - referendum
+      - impeach
+      - resign
+      - acquire
+      - merger
+      - acquisition
+      - antitrust
+      - sanctions
+      - tariff
+      - treaty
+      - invasion
+      - military
+      - coup
+      - arrest
+      - indict
+      - charged
+      - verdict
+      - ruling
+      - appointed
+      - nominated
+      - fired
+      - win the 2028
+      - win the 2026
+      - democratic
+      - republican
+      - harvey weinstein
+    size_thresholds:
+      small: 1000
+      medium: 3000
+      large: 10000
+      very_large: 30000
+    score_thresholds:
+      medium: 35
+      strong: 50
+
+  sports:
+    keywords:
+      - nba
+      - nhl
+      - nfl
+      - mlb
+      - stanley cup
+      - super bowl
+      - world series
+      - championship
+      - playoffs
+      - finals
+      - world cup
+      - fifa
+      - uefa
+      - champions league
+      - premier league
+      - formula 1
+      - f1
+      - atp
+      - wta
+      - wimbledon
+    size_thresholds:
+      small: 5000
+      medium: 15000
+      large: 50000
+      very_large: 100000
+    score_thresholds:
+      medium: 40
+      strong: 60
+
+  crypto:
+    keywords:
+      - bitcoin
+      - ethereum
+      - crypto
+      - btc
+      - eth
+      - etf approved
+      - fed rate
+      - interest rate
+      - coinbase
+      - binance
+    size_thresholds:
+      small: 10000
+      medium: 30000
+      large: 100000
+      very_large: 300000
+    score_thresholds:
+      medium: 45
+      strong: 65
