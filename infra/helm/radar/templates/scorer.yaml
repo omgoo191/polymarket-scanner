@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radar-scorer
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: radar-scorer
+  template:
+    metadata:
+      labels:
+        app: radar-scorer
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: radar-scorer
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: RADAR_MODE
+              value: "scorer"
+            - name: DATABASE_URL
+              value: {{ .Values.env.DATABASE_URL }}
+            - name: POLYGONSCAN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: radar-secrets
+                  key: polygonscanApiKey
