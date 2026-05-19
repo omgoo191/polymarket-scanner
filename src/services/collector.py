@@ -59,7 +59,7 @@ class CollectorService:
             for m in self._markets_cache.values()
             if m.condition_id
         }
-
+        logger.info(f"[Collector] fetched {len(all_trades)} global trades, condition_map={len(condition_map)} entries")
         new_count = 0
         async with db_session.get_session() as session:
             for trade in all_trades:
