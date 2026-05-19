@@ -24,7 +24,7 @@ polymarket:
   markets_limit: 100
 
 polling:
-  interval_seconds: 60
+  interval_seconds: 15
   trades_lookback_minutes: 10
 
 funding:
