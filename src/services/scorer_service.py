@@ -77,7 +77,7 @@ class ScorerService:
             if best:
                 recent_funding_usd = float(best["amount_usd"])
                 funding_minutes_before = best_delta
-
+        wallet_tx_count = await self.polygonscan.get_transaction_count(trader)
         # Price impact
         price_before = None
         async with db_session.get_session() as session:
