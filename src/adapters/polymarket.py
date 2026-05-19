@@ -30,9 +30,9 @@ class PolymarketAdapter:
         self.clob_base = cfg["polymarket"]["clob_base_url"].rstrip("/")
         self.data_base = "https://data-api.polymarket.com"
         self.markets_limit = cfg["polymarket"].get("markets_limit", 100)
-        self.insider_keywords: list[str] = [
-            kw.lower() for kw in cfg.get("insider_keywords", [])
-        ]
+        self.insider_keywords = []
+        for cat_cfg in cfg.get("categories", {}).values():
+            self.insider_keywords.extend([kw.lower() for kw in cat_cfg.get("keywords", [])])
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
