@@ -28,7 +28,7 @@ from config import load_config
 
 logger = logging.getLogger(__name__)
 
-POLYGONSCAN_API  = "https://api.polygonscan.com/api"
+POLYGONSCAN_API  = "https://api.etherscan.io/v2/api"
 MORALIS_API_BASE = "https://deep-index.moralis.io/api/v2.2"
 PUBLIC_RPC       = "https://polygon-rpc.com"
 
@@ -140,6 +140,7 @@ class PolygonscanAdapter:
 
         for contract in self.usdc_contracts:
             params = {
+                "chainid": "137",
                 "module": "account",
                 "action": "tokentx",
                 "contractaddress": contract,
@@ -240,6 +241,7 @@ class PolygonscanAdapter:
         session = await self._get_session()
         try:
             params = {
+                "chainid": "137",
                 "module": "account",
                 "action": "txlist",
                 "address": address,
@@ -275,6 +277,7 @@ class PolygonscanAdapter:
         # Polygonscan
         try:
             params = {
+                "chainid": "137",
                 "module": "proxy",
                 "action": "eth_getTransactionCount",
                 "address": address,
