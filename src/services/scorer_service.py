@@ -50,6 +50,7 @@ class ScorerService:
         # Wallet enrichment
         wallet_age_days = await self.polygonscan.get_wallet_age_days(trader)
         wallet_tx_count = await self.polygonscan.get_transaction_count(trader)
+        logger.info(f"[Scorer] wallet enrichment: age={wallet_age_days} txcount={wallet_tx_count} trader={trader[:10]}")
 
         async with db_session.get_session() as session:
             wallet_profile = await repo.get_wallet_profile(session, trader)
@@ -78,7 +79,6 @@ class ScorerService:
                 recent_funding_usd = float(best["amount_usd"])
                 funding_minutes_before = best_delta
         wallet_tx_count = await self.polygonscan.get_transaction_count(trader)
-        logger.info(f"[Scorer] wallet enrichment: age={wallet_age_days} txcount={wallet_tx_count} trader={trader[:10]}")
         # Price impact
         price_before = None
         async with db_session.get_session() as session:
